@@ -1,5 +1,3 @@
-#version 130
-
 #define bs $bar_spacing
 #define bw $bar_width
 #define blk $background_color
@@ -37,26 +35,46 @@ const vec4 colors[] = vec4[](
     orange
 );
 
-// From rbn42-bar
-vec4 mean(float _from,float _to) {
+vec4 fetchAt(float i) {
+    float w = iChannelResolution[1].x;
+    float h = iChannelResolution[1].y;
+    vec2 uv = vec2((i + 0.5) / w, 0.5 / h);
+    return texture(iChannel2, uv);
+}
 
-    if(_from>1.0)
-        return vec4(0);
+vec4 mean(float _from, float _to)
+{
+    // if from > 1.0 (i.e. outside [0..1] in normalized space), return zero immediately:
+    if (_from > 1.0) {
+        return vec4(0.0);
+    }
 
-    _from=iChannelResolution[1].x*_from;
-    _to=iChannelResolution[1].x*_to;
+    float w   = iChannelResolution[1].x;
+    float px0 = _from * w;
+    float px1 = _to   * w;
 
-    vec4 v=texelFetch(iChannel2, ivec2(_from,0),0) * (1.0-fract(_from)) ;
+    // left edge:
+    float i0    = floor(px0);
+    float frac0 = 1.0 - fract(px0);
+    vec4 sum    = fetchAt(i0) * frac0;
 
-    for(float i=ceil(_from); i<floor(_to); i++)
-        v+=texelFetch(iChannel2, ivec2(i,0),0) ;
+    // sum all full texels between ceil(px0) .. floor(px1) (exclusive of fractional edges):
+    for (float i = ceil(px0); i < floor(px1); i += 1.0) {
+        sum += fetchAt(i);
+    }
 
-    if(floor(_to)>floor(_from))
-        v+=texelFetch(iChannel2,ivec2(_to,0),0)* fract(_to);
-    else
-        v-=texelFetch(iChannel2,ivec2(_to,0),0)*(1.0- fract(_to));
+    // right edge:
+    float i1    = floor(px1);
+    float frac1 = fract(px1);
+    if (i1 > i0) {
+        // add the fractional piece at the right
+        sum += fetchAt(i1) * frac1;
+    } else {
+        // if the entire range fits inside one pixel, subtract the “over‐count”
+        sum -= fetchAt(i1) * (1.0 - frac1);
+    }
 
-    return v/(_to-_from);
+    return sum / (px1 - px0);
 }
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord ) {

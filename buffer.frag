@@ -1,5 +1,3 @@
-#version 130
-
 #define smooth_amnt $smooth_amount
 
 void mainImage( out vec4 fragColor, in vec2 fragCoord ) {
